@@ -14,10 +14,10 @@ public class UserController : ControllerBase
 {
     private readonly IUserRepository _repository;
     private readonly TokenGenerator _tokenGenerator;
-    public UserController(IUserRepository repository)
+    public UserController(IUserRepository repository, IConfiguration configuration)
     {
          _repository = repository;
-        _tokenGenerator = new TokenGenerator();
+        _tokenGenerator = new TokenGenerator(configuration);
     }
 
     [HttpPost("signup")]

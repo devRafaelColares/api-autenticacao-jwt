@@ -7,22 +7,29 @@ namespace Auth.Services;
 
 public class TokenGenerator
 {
+    private readonly string _secret;
+    private readonly int _expiresHours;
+
+    public TokenGenerator(IConfiguration configuration)
+    {
+        _secret = configuration["Jwt:Secret"] ?? throw new ArgumentNullException("Jwt:Secret");
+        _expiresHours = int.Parse(configuration["Jwt:ExpiresHours"] ?? "1");
+    }
+
     public string Generate(User user)
     {
-        var Secret = "4d82a63bbdc67c1e4784ed6587f3730c";
-        var ExpiresHours = 4;
         var tokenHandler = new JwtSecurityTokenHandler();
-            var tokenDescriptor = new SecurityTokenDescriptor()
-            {
-                Subject = AddClaims(user),
-                SigningCredentials = new SigningCredentials(
-                    new SymmetricSecurityKey(Encoding.ASCII.GetBytes(Secret)),
-                    SecurityAlgorithms.HmacSha256Signature
-                ),
-                Expires = DateTime.Now.AddHours(ExpiresHours)
-            };
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            return tokenHandler.WriteToken(token);
+        var tokenDescriptor = new SecurityTokenDescriptor()
+        {
+            Subject = AddClaims(user),
+            SigningCredentials = new SigningCredentials(
+                new SymmetricSecurityKey(Encoding.ASCII.GetBytes(_secret)),
+                SecurityAlgorithms.HmacSha256Signature
+            ),
+            Expires = DateTime.Now.AddHours(_expiresHours)
+        };
+        var token = tokenHandler.CreateToken(tokenDescriptor);
+        return tokenHandler.WriteToken(token);
     }
 
     private ClaimsIdentity AddClaims(User user)
@@ -33,5 +40,4 @@ public class TokenGenerator
         claims.AddClaim(new Claim(ClaimTypes.Name, user.Name!));
         return claims;
     }
-
 }
