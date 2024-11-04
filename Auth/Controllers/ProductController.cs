@@ -14,6 +14,7 @@ namespace Auth.Controllers;
 public class ProductController : ControllerBase
 {
     [HttpGet]
+    [AllowAnonymous]
     public IActionResult Get()
     {
         return Ok(new { message = "Rota autorizada" });
