@@ -17,7 +17,7 @@ public class ProductController : ControllerBase
     [AllowAnonymous]
     public IActionResult Get()
     {
-        return Ok(new { message = "Rota autorizada" });
+        return Ok(new { message = "Rota autorizada [AllowAnonymous]" });
     }
 
     [HttpPost]

@@ -23,4 +23,9 @@ public class UserRepository : IUserRepository
         User? existingUser = _context.Users.Where(u => u.Email == email).FirstOrDefault();
         return existingUser;
     }
+
+    public List<User> GetAll()
+    {
+        return _context.Users.ToList();
+    }
 }

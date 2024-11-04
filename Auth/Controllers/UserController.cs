@@ -41,5 +41,11 @@ public class UserController : ControllerBase
         return Ok(new { token });
     }
 
+    [HttpGet("all")]
+    [AllowAnonymous]
+    public IActionResult GetAll()
+    {
+        return Ok(_repository.GetAll());
+    }
 }
 

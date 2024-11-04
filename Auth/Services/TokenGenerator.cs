@@ -26,7 +26,7 @@ public class TokenGenerator
                 new SymmetricSecurityKey(Encoding.ASCII.GetBytes(_secret)),
                 SecurityAlgorithms.HmacSha256Signature
             ),
-            Expires = DateTime.Now.AddHours(_expiresHours)
+            Expires = DateTime.UtcNow.AddHours(_expiresHours)
         };
         var token = tokenHandler.CreateToken(tokenDescriptor);
         return tokenHandler.WriteToken(token);
