@@ -4,48 +4,77 @@ using Auth.Repository;
 using Auth.DTO;
 using Auth.Services;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Configuration;
 
-namespace Auth.Controllers;
-
-[ApiController]
-[Route("user")]
-public class UserController : ControllerBase
+namespace Auth.Controllers
 {
-    private readonly IUserRepository _repository;
-    private readonly TokenGenerator _tokenGenerator;
-    public UserController(IUserRepository repository, IConfiguration configuration)
+    [ApiController]
+    [Route("user")]
+    public class UserController : ControllerBase
     {
-         _repository = repository;
-        _tokenGenerator = new TokenGenerator(configuration);
-    }
+        private readonly IUserRepository _repository;
+        private readonly TokenGenerator _tokenGenerator;
 
-    [HttpPost("signup")]
-    public IActionResult AddUser([FromBody] User user)
-    {
-        User userCreated = _repository.Add(user);
+        public UserController(IUserRepository repository, IConfiguration configuration)
+        {
+            _repository = repository;
+            _tokenGenerator = new TokenGenerator(configuration);
+        }
 
-        var token = _tokenGenerator.Generate(user);
+        [HttpPost("signup")]
+        public IActionResult AddUser([FromBody] User user)
+        {
+            User userCreated = _repository.Add(user);
 
-        return Created("", new { token });
-    }
+            var token = _tokenGenerator.GenerateToken(userCreated);
 
-    [HttpPost("login")]
-    public IActionResult Login([FromBody] LoginDTORequest loginDTO)
-    {
-        User? existingUser = _repository.GetUserByEmail(loginDTO.Email!);
-        if (existingUser == null) return Unauthorized(new { message = "Incorrect e-mail or password" });
-        if (existingUser.Password != loginDTO.Password) return Unauthorized(new { message = "Incorrect e-mail or password" });
+            // Definir o cookie JWT com HttpOnly e Secure
+            Response.Cookies.Append("jwt_token", token, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,  // Somente para HTTPS em produção
+                SameSite = SameSiteMode.Strict, // Proteção contra CSRF
+                Expires = DateTime.UtcNow.AddHours(1)
+            });
 
-        var token = _tokenGenerator.Generate(existingUser);
-        return Ok(new { token });
-    }
+            return Created("", new { message = "User created and logged in successfully" });
+        }
 
-    [HttpGet("all")]
-    [AllowAnonymous]
-    public IActionResult GetAll()
-    {
-        return Ok(_repository.GetAll());
+        [HttpPost("login")]
+        public IActionResult Login([FromBody] LoginDTORequest loginDTO)
+        {
+            User? existingUser = _repository.GetUserByEmail(loginDTO.Email!);
+            if (existingUser == null || existingUser.Password != loginDTO.Password)
+                return Unauthorized(new { message = "Incorrect e-mail or password" });
+
+            var token = _tokenGenerator.GenerateToken(existingUser);
+
+            // Configurar o cookie JWT
+            Response.Cookies.Append("jwt_token", token, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,  // Somente para HTTPS em produção
+                SameSite = SameSiteMode.Strict, // Proteção contra CSRF
+                Expires = DateTime.UtcNow.AddHours(1)
+            });
+
+            return Ok(new { message = "Login successful" });
+        }
+
+        [HttpPost("logout")]
+        public IActionResult Logout()
+        {
+            // Remover o cookie JWT
+            Response.Cookies.Delete("jwt_token");
+
+            return Ok(new { message = "Logout successful" });
+        }
+
+        [HttpGet("all")]
+        [AllowAnonymous]
+        public IActionResult GetAll()
+        {
+            return Ok(_repository.GetAll());
+        }
     }
 }
-
