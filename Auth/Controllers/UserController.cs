@@ -22,25 +22,18 @@ namespace Auth.Controllers
         }
 
         [HttpPost("signup")]
+        [AllowAnonymous]
         public IActionResult AddUser([FromBody] User user)
         {
             User userCreated = _repository.Add(user);
 
             var token = _tokenGenerator.GenerateToken(userCreated);
 
-            // Definir o cookie JWT com HttpOnly e Secure
-            Response.Cookies.Append("jwt_token", token, new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = true,  // Somente para HTTPS em produção
-                SameSite = SameSiteMode.Strict, // Proteção contra CSRF
-                Expires = DateTime.UtcNow.AddHours(1)
-            });
-
-            return Created("", new { message = "User created and logged in successfully" });
+            return Created("", new { message = "User created and logged in successfully", token });
         }
 
         [HttpPost("login")]
+        [AllowAnonymous]
         public IActionResult Login([FromBody] LoginDTORequest loginDTO)
         {
             User? existingUser = _repository.GetUserByEmail(loginDTO.Email!);
@@ -49,32 +42,60 @@ namespace Auth.Controllers
 
             var token = _tokenGenerator.GenerateToken(existingUser);
 
-            // Configurar o cookie JWT
-            Response.Cookies.Append("jwt_token", token, new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = true,  // Somente para HTTPS em produção
-                SameSite = SameSiteMode.Strict, // Proteção contra CSRF
-                Expires = DateTime.UtcNow.AddHours(1)
-            });
-
-            return Ok(new { message = "Login successful" });
+            return Ok(new { message = "Login successful", token });
         }
 
         [HttpPost("logout")]
         public IActionResult Logout()
         {
-            // Remover o cookie JWT
-            Response.Cookies.Delete("jwt_token");
-
             return Ok(new { message = "Logout successful" });
         }
 
         [HttpGet("all")]
-        [AllowAnonymous]
+        [Authorize]
         public IActionResult GetAll()
         {
-            return Ok(_repository.GetAll());
+            var users = _repository.GetAll();
+            if (users == null || !users.Any())
+            {
+                return NotFound(new { message = "No users found" });
+            }
+            return Ok(users);
+        }
+
+        [HttpPut("{id}")]
+        [Authorize]
+        public IActionResult UpdateUser(int id, [FromBody] User updatedUser)
+        {
+            var user = _repository.GetById(id);
+            if (user == null)
+            {
+                return NotFound(new { message = "User not found" });
+            }
+
+            user.Email = updatedUser.Email;
+            user.Password = updatedUser.Password;
+            user.Name = updatedUser.Name;
+            user.Access = updatedUser.Access;
+
+            _repository.Update(user);
+
+            return Ok(new { message = "User updated successfully" });
+        }
+
+        [HttpDelete("{id}")]
+        [Authorize]
+        public IActionResult DeleteUser(int id)
+        {
+            var user = _repository.GetById(id);
+            if (user == null)
+            {
+                return NotFound(new { message = "User not found" });
+            }
+
+            _repository.Delete(id);
+
+            return Ok(new { message = "User deleted successfully" });
         }
     }
 }

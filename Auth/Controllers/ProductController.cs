@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Auth.Models;
 using Auth.Repository;
-using Auth.DTO;
-using Auth.Services;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 
@@ -10,35 +8,69 @@ namespace Auth.Controllers
 {
     [ApiController]
     [Route("product")]
+    [Authorize] // Exigir autenticação para todas as rotas neste controlador
     public class ProductController : ControllerBase
     {
+        private readonly IProductRepository _repository;
+
+        public ProductController(IProductRepository repository)
+        {
+            _repository = repository;
+        }
+
         [HttpGet]
-        [AllowAnonymous]
+        [AllowAnonymous] // Permitir acesso anônimo para consulta de produtos
         public IActionResult Get()
         {
-            return Ok(new { message = "Rota autorizada [AllowAnonymous]" });
+            var products = _repository.GetAll();
+            if (products == null || !products.Any())
+            {
+                return NotFound(new { message = "No products found" });
+            }
+            return Ok(products);
         }
 
         [HttpPost]
         [Authorize(Policy = "levelA")]
-        public IActionResult Post()
+        public IActionResult Post([FromBody] Product product)
         {
-            var claimsIdentity = HttpContext.User.Identity as ClaimsIdentity;
-            var name = claimsIdentity?.Claims.FirstOrDefault(x => x.Type == ClaimTypes.Name)?.Value;
-            var email = claimsIdentity?.Claims.FirstOrDefault(x => x.Type == ClaimTypes.Email)?.Value;
-
-            return Created("", new { message = "Rota protegida por level A", name, email });
+            _repository.Add(product);
+            return CreatedAtAction(nameof(Get), new { id = product.Id }, new { message = "Product created successfully", product });
         }
 
-        [HttpDelete]
+        [HttpPut("{id}")]
         [Authorize(Policy = "levelB")]
-        public IActionResult Delete()
+        public IActionResult Put(int id, [FromBody] Product updatedProduct)
         {
-            var claimsIdentity = HttpContext.User.Identity as ClaimsIdentity;
-            var name = claimsIdentity?.Claims.FirstOrDefault(x => x.Type == ClaimTypes.Name)?.Value;
-            var email = claimsIdentity?.Claims.FirstOrDefault(x => x.Type == ClaimTypes.Email)?.Value;
-            
-            return Ok(new { message = "Rota protegida por level B", name, email });
+            var product = _repository.GetById(id);
+            if (product == null)
+            {
+                return NotFound(new { message = "Product not found" });
+            }
+
+            product.Model = updatedProduct.Model;
+            product.Brand = updatedProduct.Brand;
+            product.Price = updatedProduct.Price;
+            product.ManufactureDate = updatedProduct.ManufactureDate;
+
+            _repository.Update(product);
+
+            return Ok(new { message = "Product updated successfully" });
+        }
+
+        [HttpDelete("{id}")]
+        [Authorize(Policy = "levelB")]
+        public IActionResult Delete(int id)
+        {
+            var product = _repository.GetById(id);
+            if (product == null)
+            {
+                return NotFound(new { message = "Product not found" });
+            }
+
+            _repository.Delete(id);
+
+            return Ok(new { message = "Product deleted successfully" });
         }
     }
 }

@@ -10,15 +10,18 @@ namespace Auth.Services
     public class TokenGenerator
     {
         private readonly string _secret;
+        private readonly string _issuer;
+        private readonly string _audience;
         private readonly int _expiresHours;
 
         public TokenGenerator(IConfiguration configuration)
         {
             _secret = configuration["Jwt:Secret"] ?? throw new ArgumentNullException("Jwt:Secret");
+            _issuer = configuration["Jwt:Issuer"] ?? throw new ArgumentNullException("Jwt:Issuer");
+            _audience = configuration["Jwt:Audience"] ?? throw new ArgumentNullException("Jwt:Audience");
             _expiresHours = int.Parse(configuration["Jwt:ExpiresHours"] ?? "1");
         }
 
-        // Método para gerar o token JWT
         public string GenerateToken(User user)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
@@ -29,13 +32,14 @@ namespace Auth.Services
                     new SymmetricSecurityKey(Encoding.ASCII.GetBytes(_secret)),
                     SecurityAlgorithms.HmacSha256Signature
                 ),
-                Expires = DateTime.UtcNow.AddHours(_expiresHours)
+                Expires = DateTime.UtcNow.AddHours(_expiresHours),
+                Issuer = _issuer,
+                Audience = _audience
             };
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
         }
 
-        // Método para adicionar as claims do usuário ao token
         private ClaimsIdentity AddClaims(User user)
         {
             var claims = new ClaimsIdentity();

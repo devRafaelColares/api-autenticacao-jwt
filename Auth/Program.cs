@@ -3,68 +3,95 @@ using System.Security.Claims;
 using System.Text;
 using Auth.Context;
 using Auth.Repository;
-using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new() { Title = "Auth", Version = "v1" });
+
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        In = ParameterLocation.Header,
+        Description = "Por favor, insira o token JWT no formato: Bearer {token}",
+        Name = "Authorization",
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
 builder.Services.AddDbContext<DatabaseContext>();
 builder.Services.AddScoped<IDatabaseContext, DatabaseContext>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IProductRepository, ProductRepository>();
 
 var jwtSecret = builder.Configuration["Jwt:Secret"] ?? throw new ArgumentNullException("Jwt:Secret");
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? throw new ArgumentNullException("Jwt:Issuer");
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? throw new ArgumentNullException("Jwt:Audience");
 
 builder.Services.AddAuthentication(options =>
 {
-    options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
-.AddCookie(options =>
+.AddJwtBearer(options =>
 {
-    options.Cookie.HttpOnly = true;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-    options.Cookie.SameSite = SameSiteMode.Strict; // Proteção contra CSRF
-    options.Cookie.Name = "jwt_token";
-    options.Events.OnValidatePrincipal = async context =>
+    options.TokenValidationParameters = new TokenValidationParameters
     {
-        var token = context.Request.Cookies["jwt_token"];
-        if (string.IsNullOrEmpty(token))
-        {
-            context.RejectPrincipal();
-            return;
-        }
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtAudience,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSecret)),
+        ValidateLifetime = true
+    };
 
-        var tokenHandler = new JwtSecurityTokenHandler();
-        var validationParameters = new TokenValidationParameters
+    options.Events = new JwtBearerEvents
+    {
+        OnChallenge = context =>
         {
-            ValidateIssuer = false,
-            ValidateAudience = false,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSecret)),
-            ValidateLifetime = true
-        };
-
-        try
+            context.HandleResponse();
+            context.Response.StatusCode = 401;
+            context.Response.ContentType = "application/json";
+            var result = Newtonsoft.Json.JsonConvert.SerializeObject(new { message = "You are not authenticated." });
+            return context.Response.WriteAsync(result);
+        },
+        OnForbidden = context =>
         {
-            var principal = tokenHandler.ValidateToken(token, validationParameters, out _);
-            context.Principal = principal;
-        }
-        catch
-        {
-            context.RejectPrincipal();
+            context.Response.StatusCode = 403;
+            context.Response.ContentType = "application/json";
+            var result = Newtonsoft.Json.JsonConvert.SerializeObject(new { message = "You do not have the required permissions to access this resource." });
+            return context.Response.WriteAsync(result);
         }
     };
 });
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("levelA", policy => policy.RequireClaim(ClaimTypes.Email).RequireClaim(ClaimTypes.Role, "A"));
-    options.AddPolicy("levelB", policy => policy.RequireClaim(ClaimTypes.Email).RequireClaim(ClaimTypes.Role, "B"));
+    options.AddPolicy("levelA", policy => policy.RequireClaim(ClaimTypes.Role, "A"));
+    options.AddPolicy("levelB", policy => policy.RequireClaim(ClaimTypes.Role, "B"));
 });
 
 var app = builder.Build();
@@ -72,12 +99,15 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Auth API v1");
+    });
 }
 
 app.UseHttpsRedirection();
 
-app.UseAuthentication(); // Adicione essa linha para habilitar a autenticação de cookies
+app.UseAuthentication(); // Adicione essa linha para habilitar a autenticação JWT
 app.UseAuthorization();
 
 app.MapControllers();
